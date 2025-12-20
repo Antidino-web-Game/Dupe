@@ -1,0 +1,24 @@
+# Configuration des cooldowns par grade LuckPerms
+# Valeurs en secondes
+# 0 = pas de cooldown
+
+cooldowns:
+  # Grade par défaut (joueurs sans grade spécifique)
+  default: 120
+  
+  # Grades VIP
+  vip: 30
+  vipplus: 15
+  mvp: 5
+  mvpplus: 0
+  
+  # Grades staff (aucun cooldown)
+  helper: 0
+  moderator: 0
+  admin: 0
+  owner: 0
+  
+  # Ajoutez vos propres grades ici
+  # Le nom doit correspondre EXACTEMENT au nom du groupe dans LuckPerms
+  # premium: 20
+  # elite: 10

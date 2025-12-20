@@ -1,0 +1,22 @@
+name: CustomDupe
+version: 1.0
+main: fr.antidino.dupe.CustomDupe
+api-version: 1.19
+depend: [LuckPerms]
+author: Antidino
+description: Plugin de duplication avec cooldowns par grade LuckPerms
+
+commands:
+  dupe:
+    description: Duplique l'item dans votre main
+    usage: /dupe [nombre]
+    aliases: [duplicate, d]
+  dupereload:
+    description: Recharge la configuration
+    usage: /dupereload
+    permission: customdupe.reload
+
+permissions:
+  customdupe.reload:
+    description: Permet de recharger la configuration
+    default: op
