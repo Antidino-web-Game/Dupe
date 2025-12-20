@@ -1,4 +1,4 @@
-package fr.antidino.dupe;
+package me.customdupe;
 
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
@@ -136,7 +136,7 @@ public class CustomDupe extends JavaPlugin {
         }
 
         // Dupliquer l'item
-        for (int i = 0; i <= times; i++) {
+        for (int i = 0; i < times; i++) {
             ItemStack duplicated = item.clone();
 
             if (player.getInventory().addItem(duplicated).isEmpty()) {
