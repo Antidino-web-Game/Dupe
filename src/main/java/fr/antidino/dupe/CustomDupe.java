@@ -1,4 +1,4 @@
-package me.customdupe;
+package fr.antidino.dupe;
 
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
