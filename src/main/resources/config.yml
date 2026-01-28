@@ -22,3 +22,9 @@ cooldowns:
   # Le nom doit correspondre EXACTEMENT au nom du groupe dans LuckPerms
   # premium: 20
   # elite: 10
+
+# Blacklist d'items (noms de matériaux en lowercase).
+# Exemples : shulker, player_head, dragon_egg
+blacklist:
+  - player_head
+  - dragon_egg

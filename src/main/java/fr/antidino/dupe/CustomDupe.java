@@ -8,11 +8,16 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.block.ShulkerBox;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.List;
 
 public class CustomDupe extends JavaPlugin {
 
@@ -21,6 +26,10 @@ public class CustomDupe extends JavaPlugin {
 
     // Configuration des cooldowns par grade (en secondes)
     private Map<String, Integer> gradeCooldowns = new HashMap<>();
+
+    // Blacklist d'items (noms de matériaux en lowercase). "shulker" -> match toutes
+    // les shulker boxes
+    private Set<String> blacklist = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -36,6 +45,7 @@ public class CustomDupe extends JavaPlugin {
         // Charger la configuration
         saveDefaultConfig();
         loadCooldowns();
+        loadBlacklist();
 
         getLogger().info("CustomDupe activé avec cooldowns par grade !");
     }
@@ -52,6 +62,18 @@ public class CustomDupe extends JavaPlugin {
         }
 
         getLogger().info("Cooldowns chargés : " + gradeCooldowns.size() + " grades configurés");
+    }
+
+    private void loadBlacklist() {
+        blacklist.clear();
+        if (getConfig().contains("blacklist")) {
+            List<String> list = getConfig().getStringList("blacklist");
+            for (String s : list) {
+                if (s != null && !s.trim().isEmpty())
+                    blacklist.add(s.toLowerCase());
+            }
+        }
+        getLogger().info("Blacklist chargée : " + blacklist.size() + " entrées");
     }
 
     @Override
@@ -81,6 +103,7 @@ public class CustomDupe extends JavaPlugin {
 
             reloadConfig();
             loadCooldowns();
+            loadBlacklist();
             player.sendMessage("§a✓ Configuration rechargée !");
             return true;
         }
@@ -95,6 +118,28 @@ public class CustomDupe extends JavaPlugin {
         if (item == null || item.getType().isAir()) {
             player.sendMessage("§cVous devez tenir un item dans votre main !");
             return true;
+        }
+
+        // Si l'item est blacklisté (ex: "shulker" dans la config) on interdit
+        // totalement
+        if (isBlacklisted(item)) {
+            player.sendMessage("§cCet item est interdit de duplication !");
+            return true;
+        }
+
+        // Si c'est une shulker, préparer une version filtrée (supprime les items
+        // blacklistés
+        // à l'intérieur) et compter combien ont été supprimés
+        ShulkerFilterResult shulkerResult = null;
+        if (item.getItemMeta() instanceof BlockStateMeta) {
+            BlockStateMeta meta = (BlockStateMeta) item.getItemMeta();
+            if (meta.getBlockState() instanceof ShulkerBox) {
+                shulkerResult = filterShulkerContents(item);
+                if (shulkerResult.removed > 0) {
+                    player.sendMessage("§eAttention : " + shulkerResult.removed
+                            + " item(s) blacklisté(s) ont été retirés du contenu de la shulker avant duplication.");
+                }
+            }
         }
 
         // Vérifier le cooldown
@@ -127,17 +172,25 @@ public class CustomDupe extends JavaPlugin {
                 times = Integer.parseInt(args[0]);
                 if (times < 1)
                     times = 1;
-                if (times > 64)
-                    times = 64; // Limite à 64 pour éviter les abus
+                if (times > 4)
+                    times = 4;
+                player.sendMessage("§cVous avez entrez un nobre trop grand il a donc été dupli 4fois");// Limite à 64
+                                                                                                       // pour éviter
+                                                                                                       // les abus
             } catch (NumberFormatException e) {
                 player.sendMessage("§cNombre invalide !");
                 return true;
             }
         }
 
-        // Dupliquer l'item
+        // Dupliquer l'item (si shulker -> utiliser la version filtrée préparée)
         for (int i = 0; i < times; i++) {
-            ItemStack duplicated = item.clone();
+            ItemStack duplicated;
+            if (shulkerResult != null && shulkerResult.stack != null) {
+                duplicated = shulkerResult.stack.clone();
+            } else {
+                duplicated = item.clone();
+            }
 
             if (player.getInventory().addItem(duplicated).isEmpty()) {
                 // Item ajouté avec succès
@@ -158,6 +211,76 @@ public class CustomDupe extends JavaPlugin {
         }
 
         return true;
+    }
+
+    // Nouveau helper : résultat du filtrage d'une shulker
+    private static class ShulkerFilterResult {
+        final ItemStack stack;
+        final int removed;
+
+        ShulkerFilterResult(ItemStack stack, int removed) {
+            this.stack = stack;
+            this.removed = removed;
+        }
+    }
+
+    // Filtre le contenu d'une shulker en enlevant les items blacklists et renvoie
+    // la shulker modifiée + nb retirés
+    private ShulkerFilterResult filterShulkerContents(ItemStack original) {
+        if (original == null)
+            return new ShulkerFilterResult(null, 0);
+        if (!(original.getItemMeta() instanceof BlockStateMeta))
+            return new ShulkerFilterResult(original.clone(), 0);
+
+        ItemStack cloned = original.clone();
+        BlockStateMeta meta = (BlockStateMeta) cloned.getItemMeta();
+        if (!(meta.getBlockState() instanceof ShulkerBox))
+            return new ShulkerFilterResult(cloned, 0);
+
+        ShulkerBox box = (ShulkerBox) meta.getBlockState();
+        org.bukkit.inventory.Inventory inv = box.getInventory();
+        ItemStack[] contents = inv.getContents();
+        int removed = 0;
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack slot = contents[i];
+            if (slot == null)
+                continue;
+            if (isItemTypeBlacklisted(slot.getType().toString().toLowerCase())) {
+                contents[i] = null;
+                removed++;
+            }
+        }
+        inv.setContents(contents);
+        meta.setBlockState(box);
+        cloned.setItemMeta(meta);
+        return new ShulkerFilterResult(cloned, removed);
+    }
+
+    // Vérifie si un ItemStack complet est blacklisté (utilisé pour bloquer
+    // totalement un item tenu)
+    private boolean isBlacklisted(ItemStack item) {
+        if (blacklist.isEmpty())
+            return false;
+        String type = item.getType().toString().toLowerCase();
+        return isItemTypeBlacklisted(type);
+    }
+
+    // Vérifie si un type d'item (string) correspond à la blacklist (supporte
+    // shulker, head, skull, etc.)
+    private boolean isItemTypeBlacklisted(String type) {
+        if (blacklist.isEmpty())
+            return false;
+        for (String b : blacklist) {
+            if (b.equals("shulker") && type.contains("shulker"))
+                return true;
+            if (b.equals("head") && type.contains("head"))
+                return true;
+            if (b.equals("skull") && type.contains("skull"))
+                return true;
+            if (type.equals(b))
+                return true;
+        }
+        return false;
     }
 
     private int getCooldownForPlayer(Player player) {
